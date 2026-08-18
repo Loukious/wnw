@@ -115,6 +115,26 @@ class WalkApi:
         r.raise_for_status()
         return r.json()
 
+    # ── GET /api/user/order/{offset}/{limit} ────────────────────────
+    # Returns global leaderboard rankings (top players and points).
+    def get_leaderboard(self, offset: int = 1, limit: int = 10) -> dict:
+        r = self.session.get(
+            f"{BASE_URL}/api/user/order/{offset}/{limit}",
+            timeout=30,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    # ── GET /api/user/order_user ────────────────────────────────────
+    # Returns the user's specific leaderboard rank position.
+    def get_user_rank(self) -> dict:
+        r = self.session.get(
+            f"{BASE_URL}/api/user/order_user",
+            timeout=30,
+        )
+        r.raise_for_status()
+        return r.json()
+
     # ── POST /api/wecards/nearby ────────────────────────────────────
     # Returns nearby WeCards collectibles relative to (lat, lng).
     def get_nearby_wecards(self, lat: float, lng: float) -> dict:

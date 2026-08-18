@@ -1,24 +1,14 @@
-name: Walk&Win Auto Walk Simulator
+name: Walk&Win Leaderboard & Profile Info
 
 on:
   schedule:
-    # Runs at 06:00 and 18:00 UTC every day
-    - cron: '0 6,18 * * *'
+    # Runs at 20:00 UTC daily to log end-of-day rank & stats
+    - cron: '0 20 * * *'
   workflow_dispatch:
-    inputs:
-      mode:
-        description: 'Walk Mode (realtime = ~1h sleep walk, fast = 15s API run)'
-        required: true
-        default: 'realtime'
-        type: choice
-        options:
-          - 'realtime'
-          - 'fast'
 
 jobs:
-  walk:
+  leaderboard:
     runs-on: ubuntu-latest
-    timeout-minutes: 240  # Allow up to 4 hours for real-time sleep walk execution
 
     steps:
       - name: Checkout repository
@@ -39,19 +29,13 @@ jobs:
             pip install -r walk-simulator/requirements.txt
           fi
 
-      - name: Run Walk Simulator
+      - name: Fetch & Display Leaderboard Info
         env:
           PHONE_NUMBER: ${{ secrets.PHONE_NUMBER || secrets.WALK_WIN_PHONE || secrets.PHONE }}
           PIN_CODE: ${{ secrets.PIN_CODE || secrets.WALK_WIN_PIN || secrets.PIN }}
-          WALK_MODE: ${{ inputs.mode || 'realtime' }}
         run: |
-          EXTRA_FLAGS=""
-          if [ "$WALK_MODE" = "fast" ]; then
-            EXTRA_FLAGS="--fast"
-          fi
-
-          if [ -f "walk.py" ]; then
-            python walk.py $EXTRA_FLAGS
-          elif [ -f "walk-simulator/walk.py" ]; then
-            cd walk-simulator && python walk.py $EXTRA_FLAGS
+          if [ -f "leaderboard.py" ]; then
+            python leaderboard.py
+          elif [ -f "walk-simulator/leaderboard.py" ]; then
+            cd walk-simulator && python leaderboard.py
           fi
