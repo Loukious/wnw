@@ -1,0 +1,41 @@
+name: Walk&Win Auto Walk Simulator
+
+on:
+  schedule:
+    # Runs at 07:00 and 19:00 UTC every day
+    - cron: '0 7,19 * * *'
+  workflow_dispatch:
+
+jobs:
+  walk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt
+          elif [ -f "walk-simulator/requirements.txt" ]; then
+            pip install -r walk-simulator/requirements.txt
+          fi
+
+      - name: Run Walk Simulator
+        env:
+          PHONE_NUMBER: ${{ secrets.PHONE_NUMBER || secrets.WALK_WIN_PHONE || secrets.PHONE }}
+          PIN_CODE: ${{ secrets.PIN_CODE || secrets.WALK_WIN_PIN || secrets.PIN }}
+        run: |
+          if [ -f "walk.py" ]; then
+            python walk.py --fast
+          elif [ -f "walk-simulator/walk.py" ]; then
+            cd walk-simulator && python walk.py --fast
+          fi
