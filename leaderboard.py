@@ -69,7 +69,7 @@ def show_leaderboard_info(
 
     # 2. Leaderboard Rank Position & Top Players
     try:
-        lb_res = api.get_leaderboard(offset=1, limit=top_count)
+        lb_res = api.get_leaderboard(offset=0, limit=top_count)
         lb_success = lb_res.get("success", {})
         lb_outer = lb_success.get("data", {})
         top_players = lb_outer.get("data", [])
