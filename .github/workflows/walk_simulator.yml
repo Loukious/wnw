@@ -2,8 +2,8 @@ name: Walk&Win Auto Walk Simulator
 
 on:
   schedule:
-    # Runs at 06:00 and 18:00 UTC every day
-    - cron: '0 6,18 * * *'
+    # Runs at 05:00 and 17:00 UTC every day
+    - cron: '0 5,17 * * *'
   workflow_dispatch:
     inputs:
       mode:
