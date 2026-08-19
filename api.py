@@ -117,7 +117,7 @@ class WalkApi:
 
     # ── GET /api/user/order/{offset}/{limit} ────────────────────────
     # Returns global leaderboard rankings (top players and points).
-    def get_leaderboard(self, offset: int = 1, limit: int = 10) -> dict:
+    def get_leaderboard(self, offset: int = 0, limit: int = 10) -> dict:
         r = self.session.get(
             f"{BASE_URL}/api/user/order/{offset}/{limit}",
             timeout=30,
