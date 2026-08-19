@@ -64,22 +64,40 @@ def _format_distance(m: float) -> str:
 
 
 def process_wecards_and_quizzes(
-    api: WalkApi, lat: float, lng: float, claimed_cards: set[int]
-) -> tuple[int, int]:
+    api: WalkApi,
+    lat: float,
+    lng: float,
+    claimed_cards: set[int],
+    fast: bool = False,
+    max_distance_m: float = 250.0,
+) -> tuple[int, int, tuple[float, float] | None]:
     """
-    Checks for nearby WeCards, solves any associated quiz by identifying
-    the correct answer key, and claims the card for points.
+    Checks for nearby WeCards within interactive radius (<= max_distance_m),
+    solves any associated quiz with human-like response delay, and claims the card.
 
-    Returns (quiz_points_earned, card_points_earned).
+    Returns (quiz_points_earned, card_points_earned, closest_unclaimed_target).
     """
     quiz_pts_total = 0
     card_pts_total = 0
+    closest_unclaimed_dist = float("inf")
+    closest_unclaimed_target = None
     try:
         res = api.get_nearby_wecards(lat, lng)
         cards = res.get("success", [])
         for card in cards:
             card_id = card.get("id")
             if not card_id or card_id in claimed_cards:
+                continue
+
+            dist = float(card.get("distance", 9999))
+            if dist > max_distance_m:
+                # Card is outside interactive radius for current GPS position
+                if dist < closest_unclaimed_dist:
+                    closest_unclaimed_dist = dist
+                    card_lat = float(card.get("latitude", 0))
+                    card_lng = float(card.get("longitude", 0))
+                    if card_lat != 0 and card_lng != 0:
+                        closest_unclaimed_target = (card_lat, card_lng)
                 continue
 
             is_claimed = card.get("claimed", False)
@@ -101,12 +119,20 @@ def process_wecards_and_quizzes(
                         if correct_choice:
                             answer_key = correct_choice.get("key")
                             q_label = q_data.get("question", "Quiz")
-                            ans_res = api.send_quiz_answer(quiz_id, answer_key)
+
+                            # Simulate human thinking/reading time (4–9 seconds)
+                            resp_time = random.randint(4, 9)
+                            if not fast:
+                                time.sleep(resp_time)
+
+                            ans_res = api.send_quiz_answer(
+                                quiz_id, answer_key, response_time=resp_time
+                            )
                             if ans_res.get("correct"):
                                 pts = ans_res.get("pointsEarned", 30)
                                 quiz_pts_total += pts
                                 _log(
-                                    f"    🎯 Quiz solved! [{q_label[:40]}…] → +{pts} Quiz Points"
+                                    f"    🎯 Quiz solved! [{q_label[:40]}…] → +{pts} Quiz Points ({resp_time}s think time)"
                                 )
                 except Exception as e:
                     _log(f"    ⚠ Quiz solve failed for card #{card_id}: {e}")
@@ -114,13 +140,18 @@ def process_wecards_and_quizzes(
             # 2. Claim the WeCard
             if not is_claimed:
                 try:
+                    if not fast:
+                        time.sleep(random.uniform(1.5, 3.0))
+
                     claim_res = api.claim_wecard(card_id)
                     claimed_cards.add(card_id)
                     added_pts = (
                         claim_res.get("success", {}).get("pointsAdded", card_pts)
                     )
                     card_pts_total += added_pts
-                    _log(f"    🃏 WeCard #{card_id} claimed! → +{added_pts} Card Points")
+                    _log(
+                        f"    🃏 WeCard #{card_id} claimed (dist: {dist:.0f}m)! → +{added_pts} Card Points"
+                    )
                 except Exception as e:
                     _log(f"    ⚠ WeCard claim failed for #{card_id}: {e}")
             else:
@@ -129,7 +160,7 @@ def process_wecards_and_quizzes(
     except Exception as e:
         _log(f"  ⚠ Failed to query nearby WeCards: {e}")
 
-    return quiz_pts_total, card_pts_total
+    return quiz_pts_total, card_pts_total, closest_unclaimed_target
 
 
 def run_walk(
@@ -292,11 +323,14 @@ def run_walk(
 
     if check_wecards:
         _log("  Checking initial location for WeCards & Quizzes…")
-        q_pts, c_pts = process_wecards_and_quizzes(
-            api, walker.lat, walker.lng, claimed_cards
+        q_pts, c_pts, next_target = process_wecards_and_quizzes(
+            api, walker.lat, walker.lng, claimed_cards, fast=fast
         )
         total_quiz_points += q_pts
         total_card_points += c_pts
+        if next_target:
+            _log(f"  Tracking nearby WeCard at {next_target}...")
+            walker.set_target(next_target[0], next_target[1])
 
     # ── Walk loop ──────────────────────────────────────────────────
     _log("")
@@ -385,11 +419,15 @@ def run_walk(
                 )
 
                 if check_wecards:
-                    q_pts, c_pts = process_wecards_and_quizzes(
-                        api, lat, lng, claimed_cards
+                    q_pts, c_pts, next_target = process_wecards_and_quizzes(
+                        api, lat, lng, claimed_cards, fast=fast
                     )
                     total_quiz_points += q_pts
                     total_card_points += c_pts
+                    if next_target:
+                        walker.set_target(next_target[0], next_target[1])
+                    else:
+                        walker.clear_target()
 
             except Exception as e:
                 _log(f"  ✗ change-test failed: {e}")
@@ -408,7 +446,6 @@ def run_walk(
                 f"  … {accepted_steps}/{target_steps}  "
                 f"pos=({lat:.6f}, {lng:.6f})  "
                 f"dist={_format_distance(walker.total_distance_m)}  "
-                f"ETA≈{eta_s / 60:.0f}m"
             )
 
     # ── Final summary ──────────────────────────────────────────────

@@ -42,6 +42,15 @@ def haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return EARTH_RADIUS_M * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+def bearing_to(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Calculate the initial bearing from (lat1, lng1) to (lat2, lng2) in degrees."""
+    rlat1, rlng1, rlat2, rlng2 = map(math.radians, [lat1, lng1, lat2, lng2])
+    dlng = rlng2 - rlng1
+    y = math.sin(dlng) * math.cos(rlat2)
+    x = math.cos(rlat1) * math.sin(rlat2) - math.sin(rlat1) * math.cos(rlat2) * math.cos(dlng)
+    return (math.degrees(math.atan2(y, x)) + 360) % 360
+
+
 class PathWalker:
     """
     Generates a walking path starting near (start_lat, start_lng).
@@ -83,6 +92,19 @@ class PathWalker:
         self.bearing = random.uniform(0, 360)
         self.total_distance_m = 0.0
         self._step_count = 0
+        
+        self.target_lat: float | None = None
+        self.target_lng: float | None = None
+
+    def set_target(self, lat: float, lng: float):
+        """Set a GPS waypoint for the walker to steer towards."""
+        self.target_lat = lat
+        self.target_lng = lng
+
+    def clear_target(self):
+        """Clear the current waypoint."""
+        self.target_lat = None
+        self.target_lng = None
 
     @property
     def speed_ms(self) -> float:
@@ -103,12 +125,25 @@ class PathWalker:
         # Slight random jitter in stride (±15%) — mimics real-world variance
         actual_stride = self.stride_m * random.uniform(0.85, 1.15)
 
-        # Gradually drift the bearing (like walking along winding streets)
-        self.bearing = (self.bearing + random.gauss(0, 8)) % 360
-
-        # Occasionally make a sharper turn (intersection)
-        if random.random() < 0.03:
-            self.bearing = (self.bearing + random.choice([-90, -45, 45, 90])) % 360
+        if self.target_lat is not None and self.target_lng is not None:
+            # Check if we arrived at target
+            dist_to_target = haversine_m(self.lat, self.lng, self.target_lat, self.target_lng)
+            if dist_to_target < 5.0:
+                self.clear_target()
+            else:
+                # Steer towards target bearing
+                target_brg = bearing_to(self.lat, self.lng, self.target_lat, self.target_lng)
+                diff = (target_brg - self.bearing + 180) % 360 - 180
+                # Turn up to 15 degrees per step towards the target
+                turn_amt = max(-15.0, min(15.0, diff))
+                self.bearing = (self.bearing + turn_amt + random.gauss(0, 2)) % 360
+        else:
+            # Gradually drift the bearing (like walking along winding streets)
+            self.bearing = (self.bearing + random.gauss(0, 8)) % 360
+            
+            # Occasionally make a sharper turn (intersection)
+            if random.random() < 0.03:
+                self.bearing = (self.bearing + random.choice([-90, -45, 45, 90])) % 360
 
         self.lat, self.lng = _destination(
             self.lat, self.lng, self.bearing, actual_stride
