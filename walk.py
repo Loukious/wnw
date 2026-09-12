@@ -173,7 +173,7 @@ def run_walk(
     fast: bool = False,
     check_wecards: bool = True,
     jitter_m: float = 100.0,
-    version_app: str = "5.6",
+    version_app: str = "5.7",
 ):
     """
     Simulate a walk of *target_steps* steps (or auto-calculated to hit daily goal).
@@ -270,7 +270,12 @@ def run_walk(
             valid_distance=round(server_distance, 2),
             activity_date=ds_date,
         )
-        if init_sync.get("status") == 200:
+        if isinstance(init_sync.get("success"), str):
+            _log(
+                f"  ✗ Server rejected activity sync: {init_sync['success']!r} "
+                "— steps will NOT count. Update VERSION_APP."
+            )
+        elif init_sync.get("status") == 200:
             daily_goal = int(init_sync.get("success", {}).get("dailyGoal", 14000))
     except Exception:
         pass
@@ -401,6 +406,15 @@ def run_walk(
                 )
 
                 success = resp.get("success", {})
+                # Server returns HTTP 200 with a plain-string message when it
+                # rejects the update (e.g. enforced app-version bump) — treat
+                # that as a hard error instead of silently continuing.
+                if isinstance(success, str):
+                    raise RuntimeError(
+                        f"change-test rejected by server: {success!r} "
+                        "(check VERSION_APP — server enforces minimum app version)"
+                    )
+
                 server_steps = success.get("validSteps", new_steps)
                 server_distance = float(success.get("validDistance", new_distance))
                 server_duration = float(success.get("duration", new_duration))
@@ -538,7 +552,7 @@ def main():
         or os.environ.get("PIN")
         or os.environ.get("WALK_WIN_PIN")
     )
-    version_app = os.environ.get("VERSION_APP", "5.6")
+    version_app = os.environ.get("VERSION_APP", "5.7")
 
     if not phone_number or not pin_code:
         print("Error: PHONE_NUMBER and PIN_CODE must be set in .env or passed via CLI")

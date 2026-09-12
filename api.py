@@ -30,7 +30,7 @@ class WalkApi:
         cls,
         phone_number: str,
         pin_code: str,
-        version_app: str = "5.6",
+        version_app: str = "5.7",
     ) -> "WalkApi":
         url = f"{BASE_URL}/user/login"
         headers = {
